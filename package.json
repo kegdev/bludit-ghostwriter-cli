@@ -1,0 +1,17 @@
+{
+  "name": "ghostwriter-cli",
+  "version": "1.0.0",
+  "description": "Draft blog posts with Kiro and publish them to a Bludit blog via the API plugin.",
+  "type": "module",
+  "bin": {
+    "ghostwriter": "./publish.mjs"
+  },
+  "scripts": {
+    "publish": "node publish.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "tap.keg.dev",
+  "license": "MIT"
+}
