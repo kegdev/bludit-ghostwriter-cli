@@ -39,6 +39,15 @@ assistant that can save Markdown files and run a command.
 
 ## Post format
 
+A ready-to-run example lives at
+[`examples/sample-post.md`](examples/sample-post.md) (with an image at
+`examples/robot.png`). It demonstrates every field and an inline image, and you
+can preview it right away:
+
+```bash
+node publish.mjs examples/sample-post.md --dry-run
+```
+
 A post is a Markdown file with a front-matter block at the top:
 
 ```markdown
@@ -115,6 +124,12 @@ Preview the request without sending it (tokens are never printed):
 
 ```bash
 node publish.mjs ~/Desktop/my-post.md --dry-run
+```
+
+New here? Try it against the bundled example first:
+
+```bash
+node publish.mjs examples/sample-post.md --dry-run
 ```
 
 ## Safety notes
