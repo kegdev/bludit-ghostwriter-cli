@@ -73,10 +73,35 @@ Front-matter fields:
 | `title`       | yes      | The post title.                                              |
 | `description` | no       | Short summary used for meta/SEO.                             |
 | `tags`        | no       | Comma-separated.                                             |
-| `category`    | no       | Category name as it appears in Bludit.                       |
+| `category`    | no       | An **existing** category (name or key). See [Categories](#categories).|
 | `slug`        | no       | Custom URL slug; Bludit derives one from the title if omitted.|
 | `status`      | no       | `draft` (default), `published`, or `scheduled`.              |
 | `date`        | no       | Future publish time (`YYYY-MM-DD HH:MM[:SS]`); queues the post. |
+
+## Categories
+
+Bludit **does not create categories on the fly** — a post can only use a
+category that already exists on your site. If you publish with a category that
+doesn't exist, Bludit silently drops it and the post ends up uncategorized.
+
+To avoid that, the script checks your `category` against the site's categories
+(`GET /api/categories`) before sending anything, and stops with the list of
+valid options if it doesn't match:
+
+```
+✖ Category "News" does not exist on the site, and Bludit will not create it automatically.
+Use one of these (the key is what the API expects), or create the category in the Bludit admin first:
+  - Content Creation  (key: content-creation)
+  - General  (key: general)
+```
+
+You can write the category as either its **display name** (`Content Creation`)
+or its **key** (`content-creation`); the script resolves names to keys, which is
+what the API expects. To add a new category, create it in the Bludit admin
+(Categories) first, then reference it in the post.
+
+If the category list can't be fetched (older API plugin, network issue), the
+script warns and sends the value as-is rather than blocking you.
 
 ## Scheduling
 

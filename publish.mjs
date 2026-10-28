@@ -19,6 +19,13 @@
  *
  *   ![A caption](screenshot.png)   <- local image, uploaded automatically
  *
+ * Categories:
+ *   The `category:` field must be one that already exists on the site. Bludit
+ *   does NOT create missing categories, so the script checks the value against
+ *   GET /api/categories and stops with the list of valid options if it doesn't
+ *   match. You can give either the display name ("Content Creation") or the key
+ *   ("content-creation"); the script sends the key, which is what the API wants.
+ *
  * Images:
  *   Any Markdown image whose path is local (not http/https and not already a
  *   Bludit uploads URL) is uploaded to the post's own page folder, exactly like
@@ -150,6 +157,58 @@ async function uploadImage({ apiUrl, apiToken, authToken, uuid, absImagePath }) 
     throw new Error(`Image upload failed (HTTP ${res.status}): ${data.message || 'unknown error'}`);
   }
   return data.image; // absolute URL to the uploaded image
+}
+
+// ── Fetch existing categories via GET /api/categories ─────────────────────
+// Returns an array of { name, key }. Throws on network/HTTP/JSON problems so
+// the caller can decide whether to warn or stop.
+async function fetchCategories({ apiUrl, apiToken }) {
+  const res = await fetch(`${apiUrl}/categories?token=${encodeURIComponent(apiToken)}`);
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Categories request did not return JSON (HTTP ${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (data.status !== '0' || !Array.isArray(data.data)) {
+    throw new Error(`Categories request failed (HTTP ${res.status}): ${data.message || 'unknown error'}`);
+  }
+  return data.data.map((c) => ({ name: c.name, key: c.key }));
+}
+
+// ── Resolve a front-matter category to an existing category key ────────────
+// Bludit's API expects a category *key* (e.g. "content-creation"), not the
+// display name ("Content Creation"). We accept either: a value matching a key
+// or a name (case-insensitive) resolves to that category's key. An unknown
+// category stops the run, because Bludit will not create it for you — the post
+// would silently end up uncategorized. If the category list can't be fetched
+// (old API plugin, network issue), we warn and skip validation rather than
+// block publishing.
+async function resolveCategoryKey(wanted, { apiUrl, apiToken }) {
+  let categories;
+  try {
+    categories = await fetchCategories({ apiUrl, apiToken });
+  } catch (err) {
+    console.warn(`\n⚠ Could not verify categories (${err.message}).`);
+    console.warn(`  Skipping category validation; sending "${wanted}" as-is.\n`);
+    return wanted;
+  }
+
+  const target = wanted.trim().toLowerCase();
+  const match = categories.find(
+    (c) => c.key.toLowerCase() === target || (c.name || '').toLowerCase() === target
+  );
+  if (match) return match.key;
+
+  const list = categories.length
+    ? categories.map((c) => `  - ${c.name}  (key: ${c.key})`).join('\n')
+    : '  (none defined yet)';
+  fail(
+    `Category "${wanted}" does not exist on the site, and Bludit will not create it automatically.\n` +
+    `Use one of these (the key is what the API expects), or create the category in the Bludit admin first:\n` +
+    list
+  );
 }
 
 // ── Call POST /api/pages or PUT /api/pages/<key> ──────────────────────────
@@ -286,11 +345,18 @@ async function main() {
     );
   }
 
+  // Validate the category against the site and resolve it to the key the API
+  // expects. Stops here with a helpful list if the category doesn't exist.
+  let categoryKey = null;
+  if (frontMatter.category) {
+    categoryKey = await resolveCategoryKey(frontMatter.category, { apiUrl, apiToken });
+  }
+
   // Common fields shared by create/edit.
   const baseFields = { title: frontMatter.title };
   if (frontMatter.description) baseFields.description = frontMatter.description;
   if (frontMatter.tags) baseFields.tags = frontMatter.tags;
-  if (frontMatter.category) baseFields.category = frontMatter.category;
+  if (categoryKey) baseFields.category = categoryKey;
   if (frontMatter.slug) baseFields.slug = frontMatter.slug;
   if (scheduleDate) baseFields.date = scheduleDate;
 
@@ -300,7 +366,7 @@ async function main() {
   if (scheduleDate) console.log(`Publish  : ${scheduleDate} (scheduled)`);
   console.log(`Title    : ${frontMatter.title}`);
   console.log(`Tags     : ${frontMatter.tags || '(none)'}`);
-  console.log(`Category : ${frontMatter.category || '(none)'}`);
+  console.log(`Category : ${categoryKey ? `${categoryKey}${frontMatter.category && frontMatter.category.trim().toLowerCase() !== categoryKey.toLowerCase() ? ` (from "${frontMatter.category}")` : ''}` : '(none)'}`);
   console.log(`Body     : ${body.length} chars`);
   console.log(`Images   : ${localImages.length ? localImages.join(', ') : '(none)'}`);
   console.log('─────────────────────────────────────────────────────');
