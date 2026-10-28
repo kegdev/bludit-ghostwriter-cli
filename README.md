@@ -1,15 +1,18 @@
 # Ghostwriter CLI
 
-A tiny, dependency-free tool for drafting blog posts with Kiro and publishing
-them to a [Bludit](https://www.bludit.com) blog through the official **API** plugin.
+A tiny, dependency-free tool for publishing Markdown blog posts to a
+[Bludit](https://www.bludit.com) blog through the official **API** plugin.
 
 There is no AI service, no GitHub integration, and nothing deployed. The workflow
 is deliberately simple:
 
-1. You and Kiro write a post together in chat.
-2. Kiro saves it as a Markdown file (e.g. on your Desktop).
-3. You read it over.
-4. You tell Kiro "publish it" and Kiro runs this script.
+1. Write a post as a Markdown file with a short front-matter block.
+2. (Optional) Preview what will be sent with `--dry-run`.
+3. Run the script to save it as a draft or publish it live.
+
+Because it's a plain command-line script, it slots into whatever workflow you
+already use: write posts by hand, with your favorite editor, or with an AI
+assistant that can save Markdown files and run a command.
 
 ## Requirements
 
