@@ -136,4 +136,3 @@ node publish.mjs examples/sample-post.md --publish
   you're ready.
 - The script never prints your tokens, even in `--dry-run`.
 - Credentials live only in `.env` on your machine.
-```
