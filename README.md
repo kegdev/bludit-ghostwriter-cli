@@ -75,7 +75,41 @@ Front-matter fields:
 | `tags`        | no       | Comma-separated.                                             |
 | `category`    | no       | Category name as it appears in Bludit.                       |
 | `slug`        | no       | Custom URL slug; Bludit derives one from the title if omitted.|
-| `status`      | no       | `draft` (default) or `published`.                            |
+| `status`      | no       | `draft` (default), `published`, or `scheduled`.              |
+| `date`        | no       | Future publish time (`YYYY-MM-DD HH:MM[:SS]`); queues the post. |
+
+## Scheduling
+
+You can queue a post to publish automatically at a future date and time. Give a
+future publish time either in front matter:
+
+```markdown
+---
+title: Coming Soon
+date: 2026-01-01 09:00
+---
+
+This goes live on New Year's morning.
+```
+
+...or on the command line, which works with any post:
+
+```bash
+node publish.mjs examples/sample-post.md --schedule "2026-01-01 09:00"
+```
+
+Details:
+
+- The time uses the format `YYYY-MM-DD HH:MM` (seconds optional) and is read in
+  **your machine's local timezone**, matching the Bludit admin UI.
+- The post is created with Bludit's `scheduled` status. It stays hidden on the
+  site until the time arrives, then **Bludit publishes it automatically** — you
+  can see queued posts under Content → Scheduled in the admin.
+- The date must be in the future, and `--schedule` can't be combined with
+  `--publish` (publishing now and scheduling for later are mutually exclusive).
+- Posts with local images are still created as a draft, have their images
+  uploaded, and are only then flipped to `scheduled`, so a queued post never
+  points at broken image links.
 
 ## Images
 
@@ -127,6 +161,12 @@ Publish live immediately:
 
 ```bash
 node publish.mjs examples/sample-post.md --publish
+```
+
+Queue it to publish at a future time (see [Scheduling](#scheduling)):
+
+```bash
+node publish.mjs examples/sample-post.md --schedule "2026-01-01 09:00"
 ```
 
 ## Safety notes

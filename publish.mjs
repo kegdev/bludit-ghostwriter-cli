@@ -3,7 +3,7 @@
  * Ghostwriter → Bludit publisher
  *
  * Usage:
- *   node publish.mjs <path-to-post.md> [--publish] [--dry-run]
+ *   node publish.mjs <path-to-post.md> [--publish | --schedule "YYYY-MM-DD HH:MM"] [--dry-run]
  *
  * The Markdown file starts with a front-matter block delimited by "---":
  *
@@ -12,7 +12,8 @@
  *   description: Optional short summary used for meta/SEO.
  *   tags: streaming, obs, hardware
  *   category: General
- *   status: draft            # draft | published  (default: draft)
+ *   status: draft            # draft | published | scheduled  (default: draft)
+ *   date: 2026-01-01 09:00   # future time → queue the post (scheduled)
  *   ---
  *   # Body starts here (Markdown)
  *
@@ -24,10 +25,18 @@
  *   Bludit's editor does it. The local reference is then rewritten to the
  *   uploaded URL. Image files are resolved relative to the .md file's folder.
  *
+ * Scheduling:
+ *   Give a future publish time via the `date:` front-matter field or the
+ *   --schedule flag. The post is created with type=scheduled and Bludit
+ *   publishes it automatically when that time arrives (it stays hidden until
+ *   then). The time is read in the machine's local timezone. --publish and a
+ *   schedule date are mutually exclusive.
+ *
  * Flags:
- *   --publish   Force status=published regardless of front matter.
- *   --dry-run   Print what would be sent (and which images would upload),
- *               but do not call the API.
+ *   --publish            Force status=published regardless of front matter.
+ *   --schedule <when>    Queue the post for a future "YYYY-MM-DD HH:MM[:SS]".
+ *   --dry-run            Print what would be sent (and which images would
+ *                        upload), but do not call the API.
  *
  * Credentials are read from a .env file next to this script (see .env.example).
  */
@@ -161,15 +170,66 @@ async function sendPage({ apiUrl, method, key, payload }) {
   return { res, data };
 }
 
+// ── Read the value of a "--flag value" or "--flag=value" option ────────────
+// Returns the value string, or null if the flag was not supplied.
+// Consuming the value here keeps it out of the positional (file path) args.
+function getFlagValue(args, name) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === name) return args[i + 1] ?? '';          // --flag value
+    if (a.startsWith(`${name}=`)) return a.slice(name.length + 1); // --flag=value
+  }
+  return null;
+}
+
+// ── Validate and normalize a schedule date to "YYYY-MM-DD HH:MM:SS" ────────
+// Accepts "YYYY-MM-DD HH:MM[:SS]" or ISO "YYYY-MM-DDTHH:MM[:SS]". The time is
+// interpreted in the machine's local timezone (matching the Bludit admin UI).
+function normalizeScheduleDate(raw) {
+  const s = String(raw).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) {
+    fail(
+      `Invalid schedule date "${raw}".\n` +
+      `Use "YYYY-MM-DD HH:MM" or "YYYY-MM-DD HH:MM:SS" (e.g. "2026-01-01 09:30").`
+    );
+  }
+  const [, Y, Mo, D, H, Mi, S = '00'] = m;
+  const dt = new Date(Number(Y), Number(Mo) - 1, Number(D), Number(H), Number(Mi), Number(S));
+  // Guard against impossible dates that JS would roll over (e.g. month 13).
+  if (
+    dt.getFullYear() !== Number(Y) || dt.getMonth() !== Number(Mo) - 1 ||
+    dt.getDate() !== Number(D) || dt.getHours() !== Number(H) ||
+    dt.getMinutes() !== Number(Mi) || dt.getSeconds() !== Number(S)
+  ) {
+    fail(`Invalid schedule date "${raw}": that calendar date/time does not exist.`);
+  }
+  if (dt.getTime() <= Date.now()) {
+    fail(
+      `Schedule date "${raw}" is not in the future.\n` +
+      `Pick a later date/time, or publish now with --publish.`
+    );
+  }
+  return `${Y}-${Mo}-${D} ${H}:${Mi}:${S}`;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 async function main() {
   const args = process.argv.slice(2);
+  const scheduleValue = getFlagValue(args, '--schedule');
+
+  // Treat bare "--flag" tokens as flags, but don't count the value that follows
+  // --schedule (or the --schedule=... form) as a positional file-path argument.
   const flags = new Set(args.filter((a) => a.startsWith('--')));
-  const positional = args.filter((a) => !a.startsWith('--'));
+  const positional = args.filter((a, i) => {
+    if (a.startsWith('--')) return false;
+    if (args[i - 1] === '--schedule') return false; // this token is --schedule's value
+    return true;
+  });
 
   const filePath = positional[0];
   if (!filePath) {
-    fail('Usage: node publish.mjs <path-to-post.md> [--publish] [--dry-run]');
+    fail('Usage: node publish.mjs <path-to-post.md> [--publish | --schedule "YYYY-MM-DD HH:MM"] [--dry-run]');
   }
 
   const absPath = resolve(process.cwd(), filePath);
@@ -196,8 +256,23 @@ async function main() {
   // Determine publish status. Default draft; --publish flag or status: published wins.
   let status = (frontMatter.status || 'draft').toLowerCase();
   if (flags.has('--publish')) status = 'published';
-  if (status !== 'draft' && status !== 'published') {
-    fail(`Invalid status "${status}". Use "draft" or "published".`);
+
+  // Scheduling: a date can come from the --schedule flag or a `date:` front-matter
+  // field. Either one implies a scheduled post unless --publish was given explicitly.
+  const rawDate = scheduleValue || frontMatter.date || '';
+  let scheduleDate = null;
+  if (rawDate) {
+    if (flags.has('--publish')) {
+      fail('Use either --publish or a schedule date, not both.');
+    }
+    scheduleDate = normalizeScheduleDate(rawDate);
+    status = 'scheduled';
+  } else if (status === 'scheduled') {
+    fail('status: scheduled requires a "date:" field (or the --schedule flag) with the publish time.');
+  }
+
+  if (status !== 'draft' && status !== 'published' && status !== 'scheduled') {
+    fail(`Invalid status "${status}". Use "draft", "published", or "scheduled".`);
   }
 
   // Discover local images and validate they exist on disk.
@@ -217,10 +292,12 @@ async function main() {
   if (frontMatter.tags) baseFields.tags = frontMatter.tags;
   if (frontMatter.category) baseFields.category = frontMatter.category;
   if (frontMatter.slug) baseFields.slug = frontMatter.slug;
+  if (scheduleDate) baseFields.date = scheduleDate;
 
   console.log('\n── Ghostwriter publish ──────────────────────────────');
   console.log(`Site     : ${apiUrl}`);
   console.log(`Status   : ${status}`);
+  if (scheduleDate) console.log(`Publish  : ${scheduleDate} (scheduled)`);
   console.log(`Title    : ${frontMatter.title}`);
   console.log(`Tags     : ${frontMatter.tags || '(none)'}`);
   console.log(`Category : ${frontMatter.category || '(none)'}`);
@@ -237,8 +314,11 @@ async function main() {
       for (const ref of localImages) {
         console.log(`       ${ref}  →  <site>/bl-content/uploads/pages/<uuid>/${basename(ref)}`);
       }
-      console.log('  3. Rewrite the body to the uploaded URLs and save the page' +
-        (status === 'published' ? ' (then publish).' : ' as a draft.'));
+      const finalAction =
+        status === 'published' ? ' (then publish).'
+        : status === 'scheduled' ? ` (then schedule for ${scheduleDate}).`
+        : ' as a draft.';
+      console.log('  3. Rewrite the body to the uploaded URLs and save the page' + finalAction);
     } else {
       console.log('No local images; a single create request would be sent.');
     }
@@ -254,7 +334,7 @@ async function main() {
     } catch (err) {
       fail(err.message);
     }
-    reportResult(result, status);
+    reportResult(result, status, scheduleDate);
     return;
   }
 
@@ -315,7 +395,11 @@ async function main() {
     newBody = newBody.replace(re, `$1${url}$2`);
   }
 
-  console.log(`[3/3] Saving page with image URLs${status === 'published' ? ' and publishing' : ' as draft'}...`);
+  const savingSuffix =
+    status === 'published' ? ' and publishing'
+    : status === 'scheduled' ? ` and scheduling for ${scheduleDate}`
+    : ' as draft';
+  console.log(`[3/3] Saving page with image URLs${savingSuffix}...`);
   let editResult;
   try {
     editResult = await sendPage({
@@ -330,16 +414,23 @@ async function main() {
       `The draft (key=${key}) still exists with the original local image refs.`
     );
   }
-  reportResult(editResult, status);
+  reportResult(editResult, status, scheduleDate);
 }
 
-function reportResult({ res, data }, status) {
+function reportResult({ res, data }, status, scheduleDate) {
   if (res.status === 201 || res.status === 200 || data?.status === '0') {
     const key = data?.data?.key || '(unknown key)';
     const permalink = data?.data?.permalink;
-    console.log(`\n✔ Page ${status === 'draft' ? 'saved as draft' : 'published'}.`);
+    const outcome =
+      status === 'draft' ? 'saved as draft'
+      : status === 'scheduled' ? `scheduled for ${scheduleDate}`
+      : 'published';
+    console.log(`\n✔ Page ${outcome}.`);
     console.log(`  Key      : ${key}`);
     if (permalink) console.log(`  URL      : ${permalink}`);
+    if (status === 'scheduled') {
+      console.log(`  Note     : not visible on the site until ${scheduleDate}; Bludit publishes it automatically.`);
+    }
     console.log(`  Message  : ${data?.message || 'OK'}\n`);
   } else {
     fail(
