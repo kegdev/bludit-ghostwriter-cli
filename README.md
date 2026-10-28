@@ -68,6 +68,35 @@ Front-matter fields:
 | `slug`        | no       | Custom URL slug; Bludit derives one from the title if omitted.|
 | `status`      | no       | `draft` (default) or `published`.                            |
 
+## Images
+
+Reference images with standard Markdown image syntax in the body:
+
+```markdown
+![A friendly robot](robot.png)
+```
+
+How each reference is handled depends on the path:
+
+- **Local files** (e.g. `robot.png`, `images/diagram.png`) are uploaded to the
+  post's own folder on your Bludit site, and the link is rewritten to the
+  hosted URL automatically — the same way Bludit's own editor uploads images.
+  Paths are resolved **relative to the `.md` file**, so keep images next to the
+  post (or in a subfolder you reference).
+- **Remote URLs** (`http://`, `https://`, or protocol-relative `//`) are left
+  untouched and used as-is.
+- Paths already pointing at `/bl-content/` (an existing Bludit upload) are left
+  as-is.
+
+If a local image can't be found next to the post, the script stops with an
+error and lists the missing files before sending anything. When a post has
+local images, it's always created as a draft first so the images upload before
+the post can go public — even with `--publish`, you won't end up with a live
+post full of broken image links.
+
+See [`examples/sample-post.md`](examples/sample-post.md) for a complete post,
+including an image example.
+
 ## Publishing
 
 Save as a draft (default — safest):
