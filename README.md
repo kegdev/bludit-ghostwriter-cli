@@ -108,28 +108,25 @@ including an image example.
 
 ## Publishing
 
+The examples below use the bundled [`examples/sample-post.md`](examples/sample-post.md)
+so you can run them as-is. Swap in the path to any `.md` file you like.
+
+Preview the request without sending it (tokens are never printed):
+
+```bash
+node publish.mjs examples/sample-post.md --dry-run
+```
+
 Save as a draft (default — safest):
 
 ```bash
-node publish.mjs ~/Desktop/my-post.md
+node publish.mjs examples/sample-post.md
 ```
 
 Publish live immediately:
 
 ```bash
-node publish.mjs ~/Desktop/my-post.md --publish
-```
-
-Preview the request without sending it (tokens are never printed):
-
-```bash
-node publish.mjs ~/Desktop/my-post.md --dry-run
-```
-
-New here? Try it against the bundled example first:
-
-```bash
-node publish.mjs examples/sample-post.md --dry-run
+node publish.mjs examples/sample-post.md --publish
 ```
 
 ## Safety notes
