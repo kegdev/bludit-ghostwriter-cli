@@ -111,11 +111,17 @@ Details:
   uploaded, and are only then flipped to `scheduled`, so a queued post never
   points at broken image links.
 
-See [`examples/scheduled-post.md`](examples/scheduled-post.md) for a ready-to-run
-scheduled post. Preview it with:
+Two ready-to-run examples ship with the project:
+
+- [`examples/scheduled-post.md`](examples/scheduled-post.md) — a minimal file
+  that explains the mechanics.
+- [`examples/scheduled-release-announcement.md`](examples/scheduled-release-announcement.md)
+  — a full, real-world blog post queued for a launch date.
+
+Preview either with `--dry-run`:
 
 ```bash
-node publish.mjs examples/scheduled-post.md --dry-run
+node publish.mjs examples/scheduled-release-announcement.md --dry-run
 ```
 
 ## Images
